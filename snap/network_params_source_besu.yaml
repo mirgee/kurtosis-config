@@ -1,0 +1,77 @@
+participants:
+  - cl_type: lodestar
+    cl_image: ethpandaops/lodestar:glamsterdam-devnet-6
+    supernode: true
+    cl_extra_params:
+      - --network.rateLimitMultiplier=0
+    el_type: besu
+    # el_log_level: "debug"
+    el_image: mirgee/besu:24.5.6-snap-0
+    el_extra_params:
+      - --Xsnap2-enabled
+      - --snapsync-server-enabled
+      - --rpc-tx-feecap=0
+    count: 1
+network_params:
+  genesis_delay: 20
+  fulu_fork_epoch: 0
+  gloas_fork_epoch: 1
+  seconds_per_slot: 2
+additional_services:
+  - nginx
+  # Disable tx_fuzz because legacy tx encoding fix not present yet on besu:glamsterdam-devnet-6
+  # - tx_fuzz
+  - spamoor
+port_publisher:
+  nat_exit_ip: 192.168.0.59
+  el:
+    enabled: true
+    public_port_start: 32000
+  cl:
+    enabled: true
+    public_port_start: 33000
+spamoor_params:
+  image: mirgee/spamoor:erc20-bloater-amsterdam
+  max_cpu: 4000        # bump from 2000 default
+  max_mem: 4000         # bump from 800 default
+  spammers:
+    # NOTE: uses a custom spamoor image that patches erc20_bloater to use
+    # eth_estimateGas (instead of a hardcoded 16.7M gas limit) and lowers
+    # MaxBloatedAddressesPerTx from 370 to 70, so it survives the Amsterdam
+    # fork (EIP-8037) where each new storage slot costs 64*1530=97,920
+    # state-gas (~5x the legacy 20,000 regular gas).
+    - scenario: erc20_bloater
+      config:
+        target_storage_gb: 100    # target 100 GB of storage; raise to go bigger
+        target_gas_ratio: 0.95     # use 95% of block gas per round
+        wallet_count: 100          # parallel sender wallets
+        base_fee: 20
+
+    - scenario: storagespam
+      config:
+        throughput: 100
+        max_pending: 200
+        max_wallets: 1000
+        gas_units_to_burn: 10000000
+        base_fee: 20
+        deploy_client_group: default
+
+    - scenario: factorydeploytx
+      config:
+        throughput: 50
+        max_pending: 100
+        max_wallets: 1000
+        init_code: "0x6080604052348015600f57600080fd5b50603e80601d6000396000f3fe60016000803560601c59043d5260011c59043d516020016000f3fe"  # minimal contract
+        gas_limit: 4000000
+        base_fee: 20
+        deploy_client_group: default
+
+    - scenario: erc20tx
+      config:
+        throughput: 200
+        max_pending: 400
+        max_wallets: 1000
+        random_target: true
+        amount: 1
+        base_fee: 20
+        deploy_client_group: default
